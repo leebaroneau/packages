@@ -55,6 +55,10 @@ export interface Cin7ClientOptions {
   onRequest?: () => void;
   /** Called when a retry is decided (observability hook - log attempt/status/backoff). */
   onRetry?: (info: { attempt: number; waitMs: number; status?: number; error?: unknown }) => void;
+  /** Client-wide GET-404 default: 'null' resolves null (mirror-sync style),
+   *  'throw' raises like any non-OK status (koenig-sales style, where every
+   *  call site relies on the throw). Per-call on404 still overrides. */
+  on404?: 'null' | 'throw';
 }
 
 export interface Cin7CallOptions {
@@ -91,6 +95,8 @@ export class Cin7Client {
   private readonly timeoutMs: number;
   private readonly onRequest?: () => void;
   private readonly onRetry?: Cin7ClientOptions['onRetry'];
+  private readonly on404Default: 'null' | 'throw';
+  private readonly inFlight = new Set<Promise<unknown>>();
   /** Cumulative count of outbound Cin7 HTTP requests made by this instance
    *  (includes retries - each is a real call against the daily quota). */
   requestsMade = 0;
@@ -110,6 +116,17 @@ export class Cin7Client {
     this.timeoutMs = opts.timeoutMs ?? 45_000;
     this.onRequest = opts.onRequest;
     this.onRetry = opts.onRetry;
+    this.on404Default = opts.on404 ?? 'null';
+  }
+
+  /** Resolves when every request in flight at call time has settled. For
+   *  graceful shutdown: waiting here before process.exit prevents a deploy
+   *  from killing a half-applied Cin7 write (koenig-sales SIGTERM pattern -
+   *  race this against a deadline). Never rejects. */
+  async idle(): Promise<void> {
+    while (this.inFlight.size > 0) {
+      await Promise.allSettled([...this.inFlight]);
+    }
   }
 
   static fromEnv(env: NodeJS.ProcessEnv = process.env, extra: Partial<Cin7ClientOptions> = {}): Cin7Client {
@@ -130,7 +147,7 @@ export class Cin7Client {
     init?: Parameters<typeof fetch>[1],
     timeoutMs?: number,
   ): Promise<Response> {
-    return requestWithRetry(url, init, {
+    const p = requestWithRetry(url, init, {
       apiName: 'Cin7',
       timeoutMs: timeoutMs ?? this.timeoutMs,
       maxRetries: this.maxRetries,
@@ -143,6 +160,12 @@ export class Cin7Client {
       },
       onRetry: this.onRetry,
     });
+    this.inFlight.add(p);
+    try {
+      return await p;
+    } finally {
+      this.inFlight.delete(p);
+    }
   }
 
   /** Generic call: GET/POST/PUT a /v1 path, JSON in/out, typed error on non-OK.
@@ -168,7 +191,7 @@ export class Cin7Client {
       opts.timeoutMs,
     );
     const { text, data, parseError } = await readJsonBody<T>(res);
-    if (res.status === 404 && method === 'GET' && (opts.on404 ?? 'null') === 'null') return null;
+    if (res.status === 404 && method === 'GET' && (opts.on404 ?? this.on404Default) === 'null') return null;
     if (!res.ok) {
       throw new Cin7HttpError(
         `Cin7 ${method} ${path}: HTTP ${res.status}: ${text.slice(0, 200)}`,

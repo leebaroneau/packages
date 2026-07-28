@@ -147,6 +147,30 @@ test('onRetry observability hook fires with attempt/status/wait', async () => {
   assert.deepEqual(seen, [{ attempt: 0, status: 429 }]);
 });
 
+test("client-wide on404:'throw' applies to every GET; per-call still overrides", async () => {
+  const fetchImpl = (async () => new Response('nope', { status: 404 })) as unknown as typeof fetch;
+  const c = new Cin7Client({ ...base, ...instant, fetchImpl, on404: 'throw' });
+  await assert.rejects(() => c.call('GET', '/v1/Quotes/9'), /HTTP 404/);
+  await assert.rejects(() => c.getOne('Quotes', 9), /HTTP 404/);
+  assert.equal(await c.call('GET', '/v1/Quotes/9', { on404: 'null' }), null);
+});
+
+test('idle() resolves once in-flight requests settle (shutdown drain)', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => { release = r; });
+  const fetchImpl = (async () => { await gate; return new Response('[]', { status: 200 }); }) as unknown as typeof fetch;
+  const c = new Cin7Client({ ...base, ...instant, fetchImpl });
+  const req = c.listPage('Quotes', 1, 250);
+  let drained = false;
+  const drain = c.idle().then(() => { drained = true; });
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(drained, false); // still in flight
+  release();
+  await req;
+  await drain;
+  assert.equal(drained, true);
+});
+
 test('fromEnv requires credentials', () => {
   assert.throws(() => Cin7Client.fromEnv({} as NodeJS.ProcessEnv), /CIN7_USERNAME/);
   const c = Cin7Client.fromEnv(

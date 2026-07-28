@@ -13,14 +13,14 @@
 //   - text-first body parsing - Cin7's fronting infra answers with HTML error
 //     pages, and res.json()-first hides the real status behind a SyntaxError
 //   - requestsMade counts every attempt including retries (each is a real call
-//     against the shared daily quota; feed it to @haverford-brands/usage-meter)
+//     against the shared daily quota; feed it to @leebaroneau/api-quota-meter)
 
 import {
   requestWithRetry,
   readJsonBody,
   slidingWindowThrottle,
   type Throttle,
-} from '@haverford-brands/http';
+} from '@leebaroneau/http-resilience';
 
 /** Cin7 v1 REST collections commonly paged. Any /v1 collection name works. */
 export type Cin7Resource =

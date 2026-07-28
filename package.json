@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "npm run build --workspace @haverford-brands/http && npm run build --workspaces",
+    "build": "npm run build --workspace @leebaroneau/http-resilience && npm run build --workspaces",
     "test": "npm run build && npm run test --workspaces",
     "typecheck": "npm run typecheck --workspaces"
   },

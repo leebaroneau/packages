@@ -1,5 +1,5 @@
 {
-  "name": "@haverford-brands/cin7-client",
+  "name": "@leebaroneau/cin7",
   "version": "1.0.0",
   "description": "Cin7 Omni v1 REST client for Haverford services: sliding-window rate limiting, hard timeouts, 429/5xx retry with Retry-After, per-attempt usage counting",
   "type": "module",
@@ -15,24 +15,25 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Haverford-Brands/haverford-packages.git",
+    "url": "git+https://github.com/leebaroneau/packages.git",
     "directory": "packages/cin7-client"
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
-    "@haverford-brands/http": "^1.0.0"
+    "@leebaroneau/http-resilience": "^1.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/*.test.js",
     "prepack": "npm run build"
-  }
+  },
+  "license": "MIT"
 }

@@ -1,7 +1,7 @@
 {
-  "name": "@haverford-brands/http",
+  "name": "@leebaroneau/api-quota-meter",
   "version": "1.0.0",
-  "description": "HTTP primitives for Haverford services: request timeouts, retry with Retry-After, rate-limit throttles, Sentry-friendly error shaping",
+  "description": "Daily API-quota accounting with a shared Sentry tag contract: UTC-day buckets, rollover emission, near-cap classification. Pure functions, zero deps.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,13 +15,13 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Haverford-Brands/haverford-packages.git",
-    "directory": "packages/http"
+    "url": "git+https://github.com/leebaroneau/packages.git",
+    "directory": "packages/usage-meter"
   },
   "engines": {
     "node": ">=22"
@@ -31,5 +31,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/*.test.js",
     "prepack": "npm run build"
-  }
+  },
+  "license": "MIT"
 }

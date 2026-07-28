@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   test:
@@ -21,9 +20,9 @@ jobs:
       - run: npm test
 
   publish:
-    # Publish each workspace whose package.json version is not yet in the
-    # registry. Idempotent: unchanged versions are skipped, so every push to
-    # main is safe to run.
+    # Publish each workspace whose package.json version is not yet on npmjs.
+    # Idempotent: unchanged versions are skipped, so every push to main is safe.
+    # Skips gracefully (with a visible notice) until the NPM_TOKEN secret is set.
     if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
@@ -32,17 +31,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          registry-url: https://npm.pkg.github.com
+          registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run build
       - name: Publish changed package versions
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::warning::NPM_TOKEN secret not set - skipping publish. Add an npmjs automation token as the NPM_TOKEN repo secret."
+            exit 0
+          fi
           for dir in packages/*/; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
-            if npm view "$name@$version" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "skip: $name@$version already published"
             else
               echo "publish: $name@$version"

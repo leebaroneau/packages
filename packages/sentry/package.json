@@ -1,5 +1,5 @@
 {
-  "name": "@haverford-brands/sentry",
+  "name": "@leebaroneau/sentry",
   "version": "1.0.0",
   "description": "Sentry reporter facade for Haverford services: inert without a DSN, never throws, standardised release sourcing, cron check-ins",
   "type": "module",
@@ -15,12 +15,12 @@
     "dist"
   ],
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com",
-    "access": "restricted"
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Haverford-Brands/haverford-packages.git",
+    "url": "git+https://github.com/leebaroneau/packages.git",
     "directory": "packages/sentry"
   },
   "engines": {
@@ -37,5 +37,6 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test dist/*.test.js",
     "prepack": "npm run build"
-  }
+  },
+  "license": "MIT"
 }

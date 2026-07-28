@@ -53,6 +53,19 @@ export interface Cin7ClientOptions {
   timeoutMs?: number;
   /** Called on every outbound attempt (usage accounting hook). */
   onRequest?: () => void;
+  /** Called when a retry is decided (observability hook - log attempt/status/backoff). */
+  onRetry?: (info: { attempt: number; waitMs: number; status?: number; error?: unknown }) => void;
+}
+
+export interface Cin7CallOptions {
+  params?: Record<string, string>;
+  body?: unknown;
+  /** Per-call override of the client's hard timeout (e.g. a tight 8s for an
+   *  interactive contact lookup vs 45s for bulk paging). */
+  timeoutMs?: number;
+  /** GET-404 handling: 'null' (default) resolves null; 'throw' raises
+   *  Cin7HttpError like any other non-OK status. Non-GET methods always throw. */
+  on404?: 'null' | 'throw';
 }
 
 /** Non-OK Cin7 response, with the status and body text preserved so callers
@@ -77,6 +90,7 @@ export class Cin7Client {
   private readonly maxRetries: number;
   private readonly timeoutMs: number;
   private readonly onRequest?: () => void;
+  private readonly onRetry?: Cin7ClientOptions['onRetry'];
   /** Cumulative count of outbound Cin7 HTTP requests made by this instance
    *  (includes retries - each is a real call against the daily quota). */
   requestsMade = 0;
@@ -95,6 +109,7 @@ export class Cin7Client {
     this.maxRetries = opts.maxRetries ?? 2;
     this.timeoutMs = opts.timeoutMs ?? 45_000;
     this.onRequest = opts.onRequest;
+    this.onRetry = opts.onRetry;
   }
 
   static fromEnv(env: NodeJS.ProcessEnv = process.env, extra: Partial<Cin7ClientOptions> = {}): Cin7Client {
@@ -110,10 +125,14 @@ export class Cin7Client {
     return this.auth;
   }
 
-  private async request(url: string, init?: Parameters<typeof fetch>[1]): Promise<Response> {
+  private async request(
+    url: string,
+    init?: Parameters<typeof fetch>[1],
+    timeoutMs?: number,
+  ): Promise<Response> {
     return requestWithRetry(url, init, {
       apiName: 'Cin7',
-      timeoutMs: this.timeoutMs,
+      timeoutMs: timeoutMs ?? this.timeoutMs,
       maxRetries: this.maxRetries,
       retryDelayMs: this.retryDelayMs,
       throttle: this.throttle,
@@ -122,28 +141,34 @@ export class Cin7Client {
         this.requestsMade += 1;
         this.onRequest?.();
       },
+      onRetry: this.onRetry,
     });
   }
 
   /** Generic call: GET/POST/PUT a /v1 path, JSON in/out, typed error on non-OK.
-   *  `params` are appended as query-string values. 404 on GET returns null. */
+   *  `params` are appended as query-string values. 404 on GET returns null
+   *  unless `on404: 'throw'`. */
   async call<T = unknown>(
     method: 'GET' | 'POST' | 'PUT',
     path: string,
-    opts: { params?: Record<string, string>; body?: unknown } = {},
+    opts: Cin7CallOptions = {},
   ): Promise<T | null> {
     const url = new URL(`${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`);
     for (const [k, v] of Object.entries(opts.params ?? {})) url.searchParams.set(k, v);
-    const res = await this.request(url.toString(), {
-      method,
-      headers: {
-        Authorization: this.auth,
-        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    const res = await this.request(
+      url.toString(),
+      {
+        method,
+        headers: {
+          Authorization: this.auth,
+          ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
       },
-      ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
-    });
+      opts.timeoutMs,
+    );
     const { text, data, parseError } = await readJsonBody<T>(res);
-    if (res.status === 404 && method === 'GET') return null;
+    if (res.status === 404 && method === 'GET' && (opts.on404 ?? 'null') === 'null') return null;
     if (!res.ok) {
       throw new Cin7HttpError(
         `Cin7 ${method} ${path}: HTTP ${res.status}: ${text.slice(0, 200)}`,

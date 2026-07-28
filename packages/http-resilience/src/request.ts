@@ -59,6 +59,10 @@ export interface RequestPolicy {
   throttle?: Throttle;
   /** Called before every attempt (including retries) - quota accounting hook. */
   onAttempt?: () => void;
+  /** Called when a retry has been decided, before the wait - observability
+   *  hook (log attempt/status/backoff). `status` is set for response-status
+   *  retries, `error` for transport retries. Never both. */
+  onRetry?: (info: { attempt: number; waitMs: number; status?: number; error?: unknown }) => void;
   /** Injectable for tests. Default globalThis.fetch. */
   fetchImpl?: typeof fetch;
 }
@@ -81,6 +85,7 @@ export async function requestWithRetry(
     retryOnTransportError = 'safe-methods',
     throttle,
     onAttempt,
+    onRetry,
     fetchImpl = fetch,
   } = policy;
   const method = (init?.method ?? 'GET').toUpperCase();
@@ -101,9 +106,11 @@ export async function requestWithRetry(
       if (retryOnStatus(res.status, method) && attempt < maxRetries) {
         // Consume the body so the connection can be reused before we retry.
         await res.arrayBuffer().catch(() => {});
-        await sleep(
-          computeRetryWaitMs(res.headers.get('retry-after'), attempt, retryDelayMs, Date.now(), maxDelayMs),
+        const waitMs = computeRetryWaitMs(
+          res.headers.get('retry-after'), attempt, retryDelayMs, Date.now(), maxDelayMs,
         );
+        onRetry?.({ attempt, waitMs, status: res.status });
+        await sleep(waitMs);
         continue;
       }
       return res;
@@ -111,7 +118,9 @@ export async function requestWithRetry(
       // Never retry a deliberate caller cancellation.
       const callerAborted = init?.signal?.aborted === true;
       if (transportRetryable && !callerAborted && attempt < maxRetries) {
-        await sleep(Math.min(retryDelayMs * 2 ** attempt, maxDelayMs));
+        const waitMs = Math.min(retryDelayMs * 2 ** attempt, maxDelayMs);
+        onRetry?.({ attempt, waitMs, error: err });
+        await sleep(waitMs);
         continue;
       }
       throw requestFailed(apiName, url, attempt + 1, err);

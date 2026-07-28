@@ -110,6 +110,43 @@ test('pages() stops on short page', async () => {
   assert.deepEqual(seen, [3, 1]);
 });
 
+test('per-call timeoutMs override reaches the fetch signal', async () => {
+  // A 1ms per-call timeout must abort a slow fetch even though the client
+  // default is much larger.
+  const fetchImpl = ((url: string, init: RequestInit) =>
+    new Promise((resolve, reject) => {
+      init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
+      setTimeout(() => resolve(new Response('[]', { status: 200 })), 5_000).unref();
+    })) as unknown as typeof fetch;
+  const c = new Cin7Client({ ...base, ...instant, fetchImpl, timeoutMs: 60_000, maxRetries: 0 });
+  await assert.rejects(
+    () => c.call('GET', '/v1/Contacts', { timeoutMs: 1 }),
+    /after 1 attempts/,
+  );
+});
+
+test("on404: 'throw' raises instead of resolving null", async () => {
+  const fetchImpl = (async () => new Response('nope', { status: 404 })) as unknown as typeof fetch;
+  const c = new Cin7Client({ ...base, ...instant, fetchImpl });
+  assert.equal(await c.call('GET', '/v1/Quotes/9'), null);
+  await assert.rejects(() => c.call('GET', '/v1/Quotes/9', { on404: 'throw' }), /HTTP 404/);
+});
+
+test('onRetry observability hook fires with attempt/status/wait', async () => {
+  let n = 0;
+  const seen: Array<{ attempt: number; status?: number }> = [];
+  const fetchImpl = (async () => {
+    n += 1;
+    return n === 1 ? new Response('r', { status: 429 }) : new Response('[]', { status: 200 });
+  }) as unknown as typeof fetch;
+  const c = new Cin7Client({
+    ...base, ...instant, fetchImpl,
+    onRetry: ({ attempt, status }) => seen.push({ attempt, status }),
+  });
+  await c.listPage('Quotes', 1, 250);
+  assert.deepEqual(seen, [{ attempt: 0, status: 429 }]);
+});
+
 test('fromEnv requires credentials', () => {
   assert.throws(() => Cin7Client.fromEnv({} as NodeJS.ProcessEnv), /CIN7_USERNAME/);
   const c = Cin7Client.fromEnv(

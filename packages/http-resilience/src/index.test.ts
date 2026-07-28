@@ -7,6 +7,7 @@ import {
   describeError,
   requestFailed,
   requestWithRetry,
+  requestTextWithRetry,
   readJsonBody,
   defaultRetryOnStatus,
   minIntervalThrottle,
@@ -173,6 +174,68 @@ test('custom retryOnStatus overrides the default', async () => {
     retryOnStatus: (status) => status >= 500, // opt in: POST 5xx retried
   });
   assert.equal(res.status, 502);
+  assert.equal(n, 2);
+});
+
+// ---- requestTextWithRetry ----
+
+test('requestTextWithRetry returns {res, text} and non-ok responses still carry their body', async () => {
+  const fetchImpl = (async () => new Response('teapot says no', { status: 418 })) as unknown as typeof fetch;
+  const { res, text } = await requestTextWithRetry('https://x/y', undefined, { ...fast, fetchImpl });
+  assert.equal(res.status, 418);
+  assert.equal(text, 'teapot says no');
+});
+
+test('requestTextWithRetry retries a body read that fails mid-stream (CRM stalled-read lesson)', async () => {
+  let n = 0;
+  const fetchImpl = (async () => {
+    n += 1;
+    if (n === 1) {
+      // 200 whose body stream dies mid-read - fetch resolved, text() rejects.
+      const body = new ReadableStream({
+        start(controller) {
+          controller.error(new TypeError('terminated'));
+        },
+      });
+      return new Response(body, { status: 200 });
+    }
+    return new Response('{"ok":true}', { status: 200 });
+  }) as unknown as typeof fetch;
+  const { res, text } = await requestTextWithRetry('https://x/y', undefined, { ...fast, fetchImpl });
+  assert.equal(n, 2);
+  assert.equal(res.status, 200);
+  assert.equal(text, '{"ok":true}');
+});
+
+test('requestTextWithRetry stalled read on a POST is NOT retried by default (ambiguous write)', async () => {
+  let n = 0;
+  const fetchImpl = (async () => {
+    n += 1;
+    const body = new ReadableStream({
+      start(controller) {
+        controller.error(new TypeError('terminated'));
+      },
+    });
+    return new Response(body, { status: 200 });
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    () => requestTextWithRetry('https://x/y', { method: 'POST' }, { ...fast, fetchImpl }),
+    /after 1 attempts/,
+  );
+  assert.equal(n, 1);
+  // ...but 'always' opts writes in (CRM's GraphQL POSTs are retry-safe by design).
+  n = 0;
+  const out = await requestTextWithRetry('https://x/y', { method: 'POST' }, {
+    ...fast,
+    fetchImpl: (async () => {
+      n += 1;
+      return n === 1
+        ? new Response(new ReadableStream({ start(c) { c.error(new TypeError('terminated')); } }), { status: 200 })
+        : new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch,
+    retryOnTransportError: 'always',
+  });
+  assert.equal(out.text, 'ok');
   assert.equal(n, 2);
 });
 

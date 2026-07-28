@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Cin7Client, Cin7HttpError } from './index.js';
+import { Cin7Client, Cin7HttpError, type Cin7Contact, type Cin7Quote } from './index.js';
 
 const base = { baseUrl: 'https://api.cin7.com/api', username: 'u', apiKey: 'k' };
 // Tests bypass the sliding-window default so they run instantly.
@@ -115,8 +115,14 @@ test('per-call timeoutMs override reaches the fetch signal', async () => {
   // default is much larger.
   const fetchImpl = ((url: string, init: RequestInit) =>
     new Promise((resolve, reject) => {
-      init.signal!.addEventListener('abort', () => reject(init.signal!.reason));
-      setTimeout(() => resolve(new Response('[]', { status: 200 })), 5_000).unref();
+      // The slow timer stays ref'd so the event loop survives until the abort
+      // fires (AbortSignal.timeout's own timer does not keep the loop alive),
+      // then gets cleared so the suite doesn't wait out the 5s.
+      const slow = setTimeout(() => resolve(new Response('[]', { status: 200 })), 5_000);
+      init.signal!.addEventListener('abort', () => {
+        clearTimeout(slow);
+        reject(init.signal!.reason);
+      });
     })) as unknown as typeof fetch;
   const c = new Cin7Client({ ...base, ...instant, fetchImpl, timeoutMs: 60_000, maxRetries: 0 });
   await assert.rejects(
@@ -169,6 +175,12 @@ test('idle() resolves once in-flight requests settle (shutdown drain)', async ()
   await req;
   await drain;
   assert.equal(drained, true);
+});
+
+test('Cin7Contact/Cin7Quote record types are exported for non-migrating consumers (crm mapping.ts)', () => {
+  const contact: Cin7Contact = { id: 1, firstName: 'A', customField: 'reachable' };
+  const quote: Cin7Quote = { id: 2, stage: 'New' };
+  assert.equal(contact.id + quote.id, 3);
 });
 
 test('fromEnv requires credentials', () => {

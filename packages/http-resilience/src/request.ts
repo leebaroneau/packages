@@ -69,12 +69,38 @@ export interface RequestPolicy {
 
 /** Fetch with throttle + timeout + retry. Returns the final Response (which may
  *  still be non-ok - status handling beyond retry is the caller's contract);
- *  throws only when the transport itself fails on the last attempt. */
+ *  throws only when the transport itself fails on the last attempt.
+ *
+ *  NOTE: the body is NOT read here - a read that stalls after this resolves is
+ *  outside the retry loop. Callers that must survive a stalled body stream
+ *  (crm-haverford's CrmClient lesson) should use requestTextWithRetry. */
 export async function requestWithRetry(
   url: string,
   init: Parameters<typeof fetch>[1],
   policy: RequestPolicy = {},
 ): Promise<Response> {
+  const { res } = await requestCore(url, init, policy, false);
+  return res;
+}
+
+/** Like requestWithRetry, but reads the body as text INSIDE the retry loop, so
+ *  a body stream that stalls mid-read counts as a transport failure and is
+ *  retried under the same policy (the per-attempt timeout covers the read).
+ *  Returns the final `{ res, text }`; `res` may still be non-ok. */
+export async function requestTextWithRetry(
+  url: string,
+  init: Parameters<typeof fetch>[1],
+  policy: RequestPolicy = {},
+): Promise<{ res: Response; text: string }> {
+  return requestCore(url, init, policy, true);
+}
+
+async function requestCore(
+  url: string,
+  init: Parameters<typeof fetch>[1],
+  policy: RequestPolicy,
+  readBody: boolean,
+): Promise<{ res: Response; text: string }> {
   const {
     apiName = 'HTTP',
     timeoutMs = 45_000,
@@ -113,7 +139,10 @@ export async function requestWithRetry(
         await sleep(waitMs);
         continue;
       }
-      return res;
+      // Read inside the try: a stalled/reset body stream is a transport
+      // failure like any other and goes through the same retry decision.
+      const text = readBody ? await res.text() : '';
+      return { res, text };
     } catch (err) {
       // Never retry a deliberate caller cancellation.
       const callerAborted = init?.signal?.aborted === true;

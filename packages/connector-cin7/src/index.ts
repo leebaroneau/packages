@@ -34,6 +34,35 @@ export type Cin7Resource =
   | 'Users'
   | (string & {});
 
+/** Cin7 Contact record (the fields Haverford consumers actually read; the
+ *  index signature keeps the rest reachable without a cast). */
+export interface Cin7Contact {
+  id: number;
+  type?: string;
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  mobile?: string;
+  jobTitle?: string;
+  city?: string;
+  modifiedDate?: string;
+  [k: string]: unknown;
+}
+
+/** Cin7 Quote record (same open-shape convention as Cin7Contact). */
+export interface Cin7Quote {
+  id: number;
+  reference?: string;
+  total?: number;
+  stage?: string;
+  status?: string;
+  memberId?: number;
+  expectedOrderDate?: string;
+  [k: string]: unknown;
+}
+
 export interface Cin7ClientOptions {
   baseUrl: string;
   username: string;

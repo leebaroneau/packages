@@ -8,6 +8,7 @@ export {
 } from './throttle.js';
 export {
   requestWithRetry,
+  requestTextWithRetry,
   readJsonBody,
   defaultRetryOnStatus,
   type RequestPolicy,

@@ -11,8 +11,10 @@ services across all orgs (Haverford-Brands, alx-finance, Genvest-Property, …).
 
 ## Naming convention
 
-Integration packages are named for the platform (`cin7`, `sentry`, `shopify`
-when it lands). Pure utilities are named for what they do (`http-resilience`,
+Two categories only (locked 2026-07-28 for long-term scale, AWS-SDK style):
+`connector-<platform>` for anything fronting an external platform
+(`connector-cin7`, `connector-sentry`, `connector-shopify` when it lands);
+bare descriptive names for pure utilities (`http-resilience`,
 `api-quota-meter`). Check npm for conflicts before adding a name.
 
 ## What belongs here
@@ -38,7 +40,7 @@ when it lands). Pure utilities are named for what they do (`http-resilience`,
 - The `api-quota-meter` tag names (`consumer`, `cin7_day`, `cin7_usage`, …)
   are a cross-service Sentry contract consumed by dashboards and alerts —
   never rename without migrating every emitter and query.
-- The `cin7` retry policy (429 all methods, 5xx safe methods only, transport
+- The `connector-cin7` retry policy (429 all methods, 5xx safe methods only, transport
   errors safe methods only) and its hard timeout encode production incidents
   (KOENIG-CIN7-SYNC-7/-A, the 2026-07-10 frozen backfill). Do not weaken them
   without reading the doc comments' incident references first.
@@ -50,6 +52,6 @@ when it lands). Pure utilities are named for what they do (`http-resilience`,
 
 | Service | Packages used | Since |
 | :--- | :--- | :--- |
-| quote.koenigmachinery.com.au-webhooks | http-resilience, cin7, api-quota-meter | 2026-07-28 (PR pending) |
+| quote.koenigmachinery.com.au-webhooks | http-resilience, connector-cin7, api-quota-meter | 2026-07-28 (PR pending) |
 | crm-haverford (sync) | — migrate on next touch | |
 | koenig-sales | — migrate on next touch | |

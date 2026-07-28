@@ -11,7 +11,7 @@ libraries; shared **state** stays in the owning service; domain logic never
 lands here.
 
 Integration packages are named for the platform they integrate
-(`cin7`, `sentry`, and `shopify` when it lands); pure utilities are named for
+(`connector-cin7`, `connector-sentry`, `connector-shopify` when it lands); pure utilities are named for
 what they do.
 
 ## Packages
@@ -19,16 +19,16 @@ what they do.
 | Package | What it owns |
 | :--- | :--- |
 | `@leebaroneau/http-resilience` | Request timeouts, 429/5xx retry with Retry-After, rate-limit throttles (min-interval + sliding-window), error shaping, HTML-error-page-safe JSON reading |
-| `@leebaroneau/cin7` | Cin7 Omni v1 REST client on top of http-resilience: 3/sec + 60/min sliding window, paging, per-attempt usage counting, typed errors |
+| `@leebaroneau/connector-cin7` | Cin7 Omni v1 REST client on top of http-resilience: 3/sec + 60/min sliding window, paging, per-attempt usage counting, typed errors |
 | `@leebaroneau/api-quota-meter` | Daily API-quota accounting: UTC-day buckets, rollover emission, near-cap classification, the shared Sentry tag contract (`cin7_day` / `cin7_usage` / `consumer`) |
-| `@leebaroneau/sentry` | Reporter facade over `@sentry/node`: inert without a DSN, never throws, `handled` mechanism, cron check-ins, standardised release sourcing |
+| `@leebaroneau/connector-sentry` | Reporter facade over `@sentry/node`: inert without a DSN, never throws, `handled` mechanism, cron check-ins, standardised release sourcing |
 
 ## Consuming
 
 Public packages — no registry config, no tokens. Just:
 
 ```json
-"dependencies": { "@leebaroneau/cin7": "^1.0.0" }
+"dependencies": { "@leebaroneau/connector-cin7": "^1.0.0" }
 ```
 
 Upgrades are **opt-in per service**: bump the version in a PR when you choose

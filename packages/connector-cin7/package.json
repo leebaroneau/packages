@@ -1,7 +1,7 @@
 {
-  "name": "@leebaroneau/sentry",
+  "name": "@leebaroneau/connector-cin7",
   "version": "1.0.0",
-  "description": "Sentry reporter facade for Haverford services: inert without a DSN, never throws, standardised release sourcing, cron check-ins",
+  "description": "Cin7 Omni v1 REST client for Haverford services: sliding-window rate limiting, hard timeouts, 429/5xx retry with Retry-After, per-attempt usage counting",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,16 +21,13 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/leebaroneau/packages.git",
-    "directory": "packages/sentry"
+    "directory": "packages/cin7-client"
   },
   "engines": {
     "node": ">=22"
   },
-  "peerDependencies": {
-    "@sentry/node": ">=9 <11"
-  },
-  "devDependencies": {
-    "@sentry/node": "^10.68.0"
+  "dependencies": {
+    "@leebaroneau/http-resilience": "^1.0.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

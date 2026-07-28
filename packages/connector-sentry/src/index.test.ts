@@ -64,6 +64,39 @@ test('non-Error values are wrapped; captureMessage carries level and tags', asyn
   assert.equal(events[1].tags?.consumer, 'webhooks');
 });
 
+test('undefined tag values are pruned so the tag map survives', async () => {
+  const events: any[] = [];
+  const r = initSentry({ dsn: TEST_DSN, release: 'test', beforeSend: (e) => (events.push(e), null) });
+  r.captureMessage('x', { tags: { route: '/quotes', method: undefined } });
+  await r.flush();
+  assert.deepEqual(events[0].tags, { route: '/quotes' });
+});
+
+test('captureBrowserEvent preserves the event platform', async () => {
+  const events: any[] = [];
+  const r = initSentry({ dsn: TEST_DSN, release: 'test', beforeSend: (e) => (events.push(e), null) });
+  r.captureBrowserEvent({ message: 'dom broke', platform: 'javascript', tags: { page: 'quote' } });
+  await r.flush();
+  assert.equal(events[0].message, 'dom broke');
+  assert.equal(events[0].platform, 'javascript');
+  assert.equal(events[0].tags?.page, 'quote');
+});
+
+test('integrations override is passed to the SDK init', () => {
+  let sawDefaults = false;
+  const r = initSentry({
+    dsn: TEST_DSN,
+    release: 'test',
+    beforeSend: () => null,
+    integrations: (defaults) => {
+      sawDefaults = Array.isArray(defaults);
+      return defaults.filter((i) => i.name !== 'OnUncaughtException');
+    },
+  });
+  assert.equal(r.enabled, true);
+  assert.equal(sawDefaults, true);
+});
+
 test('reporter never throws even when fed hostile input', () => {
   const r = initSentry({ dsn: TEST_DSN, release: 'test', beforeSend: () => null });
   const cyclic: Record<string, unknown> = {};

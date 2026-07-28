@@ -45,10 +45,27 @@ export interface CheckInArgs {
   config?: Parameters<typeof Sentry.captureCheckIn>[1];
 }
 
+/** A pre-built event to relay verbatim (e.g. a browser error forwarded through
+ *  a server-side relay endpoint). */
+export interface BrowserEvent {
+  message: string;
+  level?: CaptureOptions['level'];
+  /** Kept so a DOM error is grouped/rendered as browser-side, not server-side. */
+  platform?: string;
+  tags?: Record<string, Primitive>;
+  extra?: Record<string, unknown>;
+  user?: { id?: string; email?: string; username?: string };
+}
+
 export interface Reporter {
   enabled: boolean;
   captureException(err: unknown, o?: CaptureExceptionOptions): void;
   captureMessage(message: string, o?: CaptureOptions): void;
+  /** Relay a pre-built event, preserving its own platform - a Node-side
+   *  captureMessage would stamp a relayed DOM error as platform "node" and its
+   *  stack would be grouped as if it came from the server (koenig-sales
+   *  browser-relay lesson). */
+  captureBrowserEvent(ev: BrowserEvent): void;
   /** Cron Monitor check-in. Open with status "in_progress", then close with the
    *  returned id and "ok"/"error". Returns the check-in id, or undefined. */
   captureCheckIn(args: CheckInArgs): string | undefined;
@@ -59,11 +76,26 @@ const NOOP: Reporter = {
   enabled: false,
   captureException() {},
   captureMessage() {},
+  captureBrowserEvent() {},
   captureCheckIn() {
     return undefined;
   },
   async flush() {},
 };
+
+/** Sentry drops the whole tag map if any value is undefined; callers often
+ *  build tags from optional fields, so strip empties rather than lose them all
+ *  (koenig-sales reportError lesson). */
+function pruneUndefined(
+  obj: Record<string, Primitive> | undefined,
+): Record<string, Primitive> | undefined {
+  if (!obj) return undefined;
+  const out: Record<string, Primitive> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined && v !== null) out[k] = v;
+  }
+  return out;
+}
 
 /** Standardised release sourcing. Every service previously invented its own
  *  precedence; this is the union, most-specific first. Pass the result as
@@ -86,6 +118,13 @@ export interface InitSentryOptions {
   /** beforeSend hook. Tests pass one that records the event and returns null,
    *  which keeps a whole suite offline. */
   beforeSend?: NonNullable<Parameters<typeof Sentry.init>[0]>['beforeSend'];
+  /** Integrations override, passed straight to the SDK. Services that register
+   *  their own uncaughtException/unhandledRejection handlers (they need the
+   *  console.error for container logs and control the exit) should filter the
+   *  SDK's equivalents so a crash is not reported twice:
+   *    integrations: (d) => d.filter((i) => i.name !== 'OnUncaughtException'
+   *                                      && i.name !== 'OnUnhandledRejection') */
+  integrations?: NonNullable<Parameters<typeof Sentry.init>[0]>['integrations'];
 }
 
 /** Initialise the process-wide Sentry SDK and return the reporter facade.
@@ -95,7 +134,7 @@ export interface InitSentryOptions {
  *  DSN/options. Services should init at their entrypoint and pass the reporter
  *  down (or re-import it from a module-scope constant). */
 export function initSentry(opts: InitSentryOptions = {}): Reporter {
-  const { dsn, release, environment = 'production', serverName, tracesSampleRate = 0, beforeSend } = opts;
+  const { dsn, release, environment = 'production', serverName, tracesSampleRate = 0, beforeSend, integrations } = opts;
   if (!dsn) return NOOP;
 
   try {
@@ -106,6 +145,7 @@ export function initSentry(opts: InitSentryOptions = {}): Reporter {
       serverName,
       tracesSampleRate,
       beforeSend,
+      ...(integrations !== undefined ? { integrations } : {}),
     });
   } catch {
     // A DSN the SDK rejects must not take the service down with it.
@@ -119,7 +159,8 @@ export function initSentry(opts: InitSentryOptions = {}): Reporter {
       try {
         const e = err instanceof Error ? err : new Error(String(err));
         Sentry.withScope((scope) => {
-          if (tags) scope.setTags(tags);
+          const pruned = pruneUndefined(tags);
+          if (pruned) scope.setTags(pruned);
           if (extra) scope.setExtras(extra);
           if (user) scope.setUser(user);
           if (level) scope.setLevel(level);
@@ -133,11 +174,27 @@ export function initSentry(opts: InitSentryOptions = {}): Reporter {
     captureMessage(message, { tags, extra, user, level = 'info' } = {}) {
       try {
         Sentry.withScope((scope) => {
-          if (tags) scope.setTags(tags);
+          const pruned = pruneUndefined(tags);
+          if (pruned) scope.setTags(pruned);
           if (extra) scope.setExtras(extra);
           if (user) scope.setUser(user);
           scope.setLevel(level);
           Sentry.captureMessage(message);
+        });
+      } catch {
+        /* reporter must never throw */
+      }
+    },
+
+    captureBrowserEvent(ev) {
+      try {
+        Sentry.captureEvent({
+          message: ev.message,
+          level: ev.level ?? 'error',
+          platform: ev.platform ?? 'javascript',
+          tags: pruneUndefined(ev.tags),
+          extra: ev.extra,
+          user: ev.user,
         });
       } catch {
         /* reporter must never throw */

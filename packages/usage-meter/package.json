@@ -1,0 +1,35 @@
+{
+  "name": "@haverford-brands/usage-meter",
+  "version": "1.0.0",
+  "description": "Daily API-quota accounting with a shared Sentry tag contract: UTC-day buckets, rollover emission, near-cap classification. Pure functions, zero deps.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Haverford-Brands/haverford-packages.git",
+    "directory": "packages/usage-meter"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/*.test.js",
+    "prepack": "npm run build"
+  }
+}

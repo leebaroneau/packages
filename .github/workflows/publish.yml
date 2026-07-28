@@ -1,0 +1,51 @@
+name: Test & Publish
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm test
+
+  publish:
+    # Publish each workspace whose package.json version is not yet in the
+    # registry. Idempotent: unchanged versions are skipped, so every push to
+    # main is safe to run.
+    if: github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+      - run: npm ci
+      - run: npm run build
+      - name: Publish changed package versions
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for dir in packages/*/; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "skip: $name@$version already published"
+            else
+              echo "publish: $name@$version"
+              npm publish --workspace "$name"
+            fi
+          done

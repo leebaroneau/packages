@@ -1,0 +1,41 @@
+{
+  "name": "@haverford-brands/sentry",
+  "version": "1.0.0",
+  "description": "Sentry reporter facade for Haverford services: inert without a DSN, never throws, standardised release sourcing, cron check-ins",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Haverford-Brands/haverford-packages.git",
+    "directory": "packages/sentry"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "peerDependencies": {
+    "@sentry/node": ">=9 <11"
+  },
+  "devDependencies": {
+    "@sentry/node": "^10.68.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/*.test.js",
+    "prepack": "npm run build"
+  }
+}
